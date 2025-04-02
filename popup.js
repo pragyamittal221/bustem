@@ -4,16 +4,17 @@ async function updateDetections() {
   const container = document.getElementById('detections');
 
   if (detections.length === 0) {
-    container.innerHTML = '<p>No miners detected yet.</p>';
+    container.innerHTML = '<p>No miners detected yet, you\'re safe.</p>';
     return;
   }
 
   container.innerHTML = detections
     .map(d => `
       <div class="detection">
-        <div><strong>${d.type.replace('_', ' ')}</strong></div>
-        <div>${d.url}</div>
-        <div class="timestamp">${new Date(d.timestamp).toLocaleString()}</div>
+        <p><b>You are!</b></p>
+        <div>Type of mining: <strong>${d.type.replace('_', ' ')}</strong></div>
+        <div class="url">URL: ${d.url}</div>
+        <div class="timestamp">Time: ${new Date(d.timestamp).toLocaleString()}</div>
       </div>
     `)
     .join('');

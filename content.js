@@ -1,4 +1,4 @@
-// Hook WebAssembly to detect miners
+// Hook WebAssembly to detect miners using WASM instance to mine
 const originalInstantiate = WebAssembly.instantiate;
 WebAssembly.instantiate = function(buffer, imports) {
   console.warn("🚨 WebAssembly.instantiate called - possible miner!");
