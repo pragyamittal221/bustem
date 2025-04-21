@@ -1,35 +1,31 @@
 {
-  "manifest_version": 3,
-  "name": "Bust 'em",
+  "manifest_version": 2,
+  "name": "Bustem",
   "version": "1.0",
-  "description": "Detects unauthorized cryptocurrency mining activity",
+  "description": "Blocks crypto miners",
   "permissions": [
-    "activeTab",
     "webRequest",
+    "webRequestBlocking",
+    "tabs",
     "storage",
-    "alarms"
+    "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "scripts": ["background.js"],
+    "persistent": true
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_start"
-    }
-  ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "images/logo.jpeg",
-      "48": "images/logo.jpeg",
-      "128": "images/logo.jpeg"
-    }
+  "browser_action": {
+    "default_icon": "images/logo.png",
+    "default_popup": "popup.html"
   },
   "icons": {
-    "16": "images/logo.jpeg",
-    "48": "images/logo.jpeg",
-    "128": "images/logo.jpeg"
-  }
+    "48": "images/logo.png"
+  },
+  "web_accessible_resources": [
+    "blockpage.html",
+    "blockpage.css",
+    "blockpage.js",
+    "images/*"
+  ],
+  "content_security_policy": "script-src 'self'; object-src 'self'"
 }

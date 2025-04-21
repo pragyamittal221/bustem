@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bustem Blocked This Page</title>
+  <link rel="stylesheet" href="blockpage.css">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-+zMXmqUW1qZc5b4Hz7fxu9tw/yC0gT2grV7ZNRlcTUE='">
+</head>
+<body>
+  <div class="block-container">
+    <h1>🚫 Blocked by <span class="brand">Bustem</span></h1>
+    <p class="description">
+      Bustem has prevented this page from loading due to a detected cryptojacking attempt.
+    </p>
+
+    <div class="details">
+      <p><strong>Original Site:</strong></p>
+      <p id="site-url" class="code-block">[Loading...]</p>
+
+      <p><strong>Blocked Resource:</strong></p>
+      <p id="blocked-url" class="code-block">[Loading...]</p>
+
+      <p><strong>Matched Rule:</strong></p>
+      <p id="matched-rule" class="code-block">[Loading...]</p>
+    </div>
+
+    <button id="continue-btn">⚠️ Continue Anyway</button>
+    <p class="footer">If this was a mistake, you can proceed to the page. It will be whitelisted in the future.</p>
+  </div>
+
+  <script src="blockpage.js"></script>
+
+</body>
+</html>
