@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Bustem - Crypto Mining Blocker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1 class="title">BUSTEM</h1>
+    <p class="subtitle">Crypto Mining Protection</p>
+
+    <div class="power-container">
+      <div id="powerButton" class="power-button">
+        <div class="power-icon"></div>
+      </div>
+      <span id="statusText" class="status-text">OFF</span>
+    </div>
+
+    <div class="stats-container">
+      <div class="stat-box">
+        <span class="stat-number" id="blockedCount">0</span>
+        <span class="stat-label">Blocked Today</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-number" id="whitelistCount">0</span>
+        <span class="stat-label">Whitelisted</span>
+      </div>
+    </div>
+
+    <div class="list-container">
+      <div class="list-section">
+        <h3 class="list-header">Whitelisted Sites</h3>
+        <div id="whitelist" class="list-content"></div>
+      </div>
+
+      <div class="list-section">
+        <h3 class="list-header">Blocked Miners</h3>
+        <div id="blockedList" class="list-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

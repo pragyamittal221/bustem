@@ -1,7 +1,12 @@
 let regexPatterns = [];
 let whitelist = {};
+let protectionEnabled = true;
+let cryptojackingDetected = false;  // Flag to track cryptojacking alert
 
-// Convert wildcard to RegExp
+chrome.storage.sync.get(['protectionActive'], function (data) {
+  protectionEnabled = data.protectionActive !== false;
+});
+
 function wildcardToRegExp(wildcard) {
   return new RegExp("^" + wildcard
     .replace(/\./g, '\\.')
@@ -9,7 +14,6 @@ function wildcardToRegExp(wildcard) {
     .replace(/\?/g, '.') + "$");
 }
 
-// Load blacklist into memory
 fetch(chrome.runtime.getURL('blacklist.txt'))
   .then(r => r.text())
   .then(text => {
@@ -22,12 +26,13 @@ fetch(chrome.runtime.getURL('blacklist.txt'))
     }));
   });
 
-// Intercept web requests
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
-    const url = details.url;
+    if (!protectionEnabled || cryptojackingDetected) return;
 
+    const url = details.url;
     let origin;
+
     try {
       const docUrl = details.documentUrl || details.initiator;
       origin = docUrl ? new URL(docUrl).origin : new URL(url).origin;
@@ -35,8 +40,6 @@ chrome.webRequest.onBeforeRequest.addListener(
       origin = new URL(url).origin;
     }
 
-
-    // Check whitelist first
     if (whitelist[origin] && whitelist[origin].includes(url)) {
       return;
     }
@@ -58,7 +61,6 @@ chrome.webRequest.onBeforeRequest.addListener(
   ["blocking"]
 );
 
-// Whitelist handler
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "whitelist") {
     const { origin, url } = message;
@@ -68,4 +70,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     sendResponse({ status: "ok" });
   }
+
+  else if (message.action === "toggleProtection") {
+    protectionEnabled = message.isActive;
+    chrome.storage.sync.set({ protectionActive: protectionEnabled });
+
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach(tab => {
+        chrome.tabs.sendMessage(tab.id, {
+          action: "protectionStateChanged",
+          isActive: protectionEnabled
+        }).catch(() => { });
+      });
+    });
+
+    sendResponse({ status: "success" });
+  }
+
+  else if (message.action === "getProtectionState") {
+    sendResponse({ isActive: protectionEnabled });
+  }
 });
+
+/// RESOURCES
+
