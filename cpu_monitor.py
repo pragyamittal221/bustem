@@ -2,7 +2,7 @@ import psutil
 import time
 
 # Define thresholds for cryptojacking detection
-CPU_THRESHOLD = 18  # Trigger cryptojacking detection if CPU usage exceeds this threshold
+CPU_THRESHOLD = 15  # Trigger cryptojacking detection if CPU usage exceeds this threshold
 CHECK_INTERVAL = 1  # Check system resources every second
 FLAT_LINE_THRESHOLD = 5  # Number of consecutive seconds to consider a flat line
 
@@ -23,7 +23,7 @@ def monitor_system_resources():
         # Check if the CPU usage exceeds the threshold
         if current_cpu_usage > CPU_THRESHOLD:
             # Check if the CPU usage is consistent (flat line behavior)
-            if abs(current_cpu_usage - previous_cpu_usage) < 1:
+            if abs(current_cpu_usage - previous_cpu_usage) < 3.5:
                 consecutive_high_usage_count += 1
             else:
                 consecutive_high_usage_count = 0  # Reset if the CPU usage fluctuates
