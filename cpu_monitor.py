@@ -4,8 +4,6 @@ import psutil
 import time
 import json
 
-time.sleep(10)
-
 CPU_THRESHOLD = 15
 CHECK_INTERVAL = 1
 FLAT_LINE_THRESHOLD = 5
