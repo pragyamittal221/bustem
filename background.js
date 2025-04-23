@@ -71,9 +71,9 @@ chrome.webRequest.onCompleted.addListener(async (details) => {
 let lastCpuSample = null;
 let consecutiveFlatCount = 0;
 const CPU_THRESHOLD = 15;
-const FLAT_LINE_THRESHOLD = 10;
+const FLAT_LINE_THRESHOLD = 7;
 const CPU_CHECK_INTERVAL = 1000;
-const FLUCTUATION_RATE =  3;
+const FLUCTUATION_RATE =  3.5;
 
 function calculateUsageDelta(prev, curr) {
   return curr.map((core, i) => {
