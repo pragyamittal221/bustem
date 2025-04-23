@@ -71,8 +71,9 @@ chrome.webRequest.onCompleted.addListener(async (details) => {
 let lastCpuSample = null;
 let consecutiveFlatCount = 0;
 const CPU_THRESHOLD = 15;
-const FLAT_LINE_THRESHOLD = 7;
-const CPU_CHECK_INTERVAL = 1000; // ms
+const FLAT_LINE_THRESHOLD = 10;
+const CPU_CHECK_INTERVAL = 1000;
+const FLUCTUATION_RATE =  3;
 
 function calculateUsageDelta(prev, curr) {
   return curr.map((core, i) => {
@@ -96,14 +97,17 @@ function monitorCpuUsage() {
       const avgUsage = usagePercents.reduce((a, b) => a + b, 0) / usagePercents.length;
       current._avg = avgUsage;
 
-      chrome.runtime.sendMessage({
-        action: 'cpuSample',
-        avgUsage: avgUsage
-      });
+      chrome.runtime.sendMessage({ action: 'cpuSample', avgUsage }).catch(e => {});
+
+      console.log(
+          `%c[CPU Monitor] Avg CPU Usage: %c${avgUsage.toFixed(2)}%`,
+          'color: gray; font-weight: bold;',
+          avgUsage > CPU_THRESHOLD ? 'color: red; font-weight: bold;' : 'color: green; font-weight: bold;'
+        );
 
       if (avgUsage > CPU_THRESHOLD) {
         const lastAvg = lastCpuSample._avg || 0;
-        const isFlat = Math.abs(avgUsage - lastAvg) < 3.5;
+        const isFlat = Math.abs(avgUsage - lastAvg) < FLUCTUATION_RATE;
 
         if (isFlat) {
           consecutiveFlatCount++;
