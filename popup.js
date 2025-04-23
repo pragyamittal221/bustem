@@ -29,9 +29,9 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Toggle protection
   powerButton.addEventListener('click', function() {
-    isActive = !isActive;
+    isActive = !isActive; // Toggle the active state
     updateUI();
-    
+
     // Save state and notify background script
     chrome.storage.sync.set({ protectionActive: isActive }, function() {
       chrome.runtime.sendMessage({
@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   });
-  
+
   // Update UI based on current state
   function updateUI() {
     if (isActive) {
@@ -55,11 +55,11 @@ document.addEventListener('DOMContentLoaded', function() {
       document.body.style.backgroundColor = '#2e1a1a';
     }
   }
-  
+
   // Populate list containers
   function populateList(container, items) {
-    container.innerHTML = '';
-    
+    container.innerHTML = ''; // Clear current list
+
     if (Array.isArray(items)) {
       items.forEach(item => {
         const div = document.createElement('div');
@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   }
-  
+
   // Listen for updates from background script
   chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     if (request.action === "updateBlockedCount") {
