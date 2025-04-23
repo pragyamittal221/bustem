@@ -95,8 +95,8 @@ const cpuChart = new Chart(ctx, {
     datasets: [{
       label: 'CPU Usage (%)',
       data: Array(20).fill(0),
-      borderColor: 'rgba(54, 162, 235, 1)',
-      backgroundColor: 'rgba(54, 162, 235, 0.2)',
+      borderColor: 'white', // Make the chart line white
+      backgroundColor: 'rgba(255, 255, 255, 0.2)', // Optional: lighter white background fill
       fill: true,
       tension: 0.3
     }]
@@ -111,6 +111,7 @@ const cpuChart = new Chart(ctx, {
     scales: {
       y: {
         ticks: {
+          color: 'white',
           callback: function(value) {
             return value + '%';
           }
