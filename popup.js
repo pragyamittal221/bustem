@@ -5,34 +5,28 @@ document.addEventListener('DOMContentLoaded', function() {
   const whitelistCount = document.getElementById('whitelistCount');
   const whitelistContainer = document.getElementById('whitelist');
   const blockedListContainer = document.getElementById('blockedList');
-  
-  // Initialize state
+
   let isActive = false;
-  
-  // Load saved state from storage
+
   chrome.storage.sync.get(['protectionActive', 'whitelisted', 'blocked'], function(data) {
     isActive = data.protectionActive !== false; // Default to true if undefined
     updateUI();
-    
-    // Populate whitelist
+
     if (data.whitelisted) {
       whitelistCount.textContent = Object.keys(data.whitelisted).length;
       populateList(whitelistContainer, data.whitelisted);
     }
-    
-    // Populate blocked list
+
     if (data.blocked) {
       blockedCount.textContent = data.blocked.length;
       populateList(blockedListContainer, data.blocked);
     }
   });
-  
-  // Toggle protection
+
   powerButton.addEventListener('click', function() {
-    isActive = !isActive;
+    isActive = !isActive; // Toggle the active state
     updateUI();
-    
-    // Save state and notify background script
+
     chrome.storage.sync.set({ protectionActive: isActive }, function() {
       chrome.runtime.sendMessage({
         action: "toggleProtection",
@@ -40,8 +34,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   });
-  
-  // Update UI based on current state
+
   function updateUI() {
     if (isActive) {
       powerButton.classList.add('active');
@@ -55,11 +48,10 @@ document.addEventListener('DOMContentLoaded', function() {
       document.body.style.backgroundColor = '#2e1a1a';
     }
   }
-  
-  // Populate list containers
+
   function populateList(container, items) {
     container.innerHTML = '';
-    
+
     if (Array.isArray(items)) {
       items.forEach(item => {
         const div = document.createElement('div');
@@ -78,8 +70,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   }
-  
-  // Listen for updates from background script
+
   chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     if (request.action === "updateBlockedCount") {
       blockedCount.textContent = request.count;
@@ -94,3 +85,62 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+
+const ctx = document.getElementById('cpuChart').getContext('2d');
+const cpuChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: Array(20).fill(''),
+    datasets: [{
+      label: 'CPU Usage (%)',
+      data: Array(20).fill(0),
+      borderColor: 'white', // Make the chart line white
+      backgroundColor: 'rgba(255, 255, 255, 0.2)', // Optional: lighter white background fill
+      fill: true,
+      tension: 0.3
+    }]
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    plugins: {
+      legend: { display: false },
+      autocolors: false,
+    },
+    scales: {
+      y: {
+        ticks: {
+          color: 'white',
+          callback: function(value) {
+            return value + '%';
+          }
+        },
+        // Add adaptive configuration
+        beginAtZero: true,
+        grace: '5%'
+      }
+    }
+  }
+});
+
+function updateChart(newValue) {
+  cpuChart.data.datasets[0].data.push(newValue);
+  cpuChart.data.datasets[0].data.shift();
+
+  cpuChart.update();
+}
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'cpuSample' && typeof request.avgUsage === 'number') {
+    const usage = Math.round(request.avgUsage);
+    const dataset = cpuChart.data.datasets[0];
+
+    dataset.data.push(usage);
+    if (dataset.data.length > 20) dataset.data.shift();
+
+    cpuChart.update();
+  }
+});
+
+
