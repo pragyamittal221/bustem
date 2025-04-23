@@ -1,138 +1,133 @@
-// Extension configuration and state
 let regexPatterns = [];
-let whitelist = {};
-let protectionEnabled = true;
-let cryptojackingDetected = false;
-let cpuMonitorSocket = null;
-let cpuUsageHistory = [];
 let blockedUrls = [];
+let protectionEnabled = true;
 
-// Initialize protection state from storage
-chrome.storage.sync.get(['protectionActive', 'blockedUrls'], function(data) {
-  protectionEnabled = data.protectionActive !== false;
-  if (data.blockedUrls) {
-    blockedUrls = data.blockedUrls;
-  }
-});
-
-// Convert wildcard patterns to regular expressions
-function wildcardToRegExp(wildcard) {
+// Convert wildcard to regex
+function wildcardToRegex(wildcard) {
   return new RegExp("^" + wildcard
     .replace(/\./g, '\\.')
     .replace(/\*/g, '.*')
     .replace(/\?/g, '.') + "$");
 }
 
-// Load blacklist patterns
-fetch(chrome.runtime.getURL('blacklist.txt'))
-  .then(r => r.text())
-  .then(text => {
-    const lines = text.split('\n').filter(l =>
-      l.trim() && !l.startsWith('#')
-    );
-    regexPatterns = lines.map(entry => ({
-      pattern: entry,
-      regex: wildcardToRegExp(entry)
+// Load patterns and state
+(async () => {
+  const data = await chrome.storage.sync.get(['protectionActive', 'blockedUrls']);
+  protectionEnabled = data.protectionActive !== false;
+  blockedUrls = data.blockedUrls || [];
+
+  const blacklistText = await fetch(chrome.runtime.getURL('blacklist.txt')).then(r => r.text());
+  regexPatterns = blacklistText.split('\n')
+    .filter(line => line.trim() && !line.startsWith('#'))
+    .map(pattern => ({
+      pattern,
+      regex: wildcardToRegex(pattern)
     }));
+})();
+
+// Detect and redirect if blacklisted
+chrome.webRequest.onCompleted.addListener(async (details) => {
+  if (!protectionEnabled) return;
+
+  const url = details.url;
+
+  for (let { regex, pattern } of regexPatterns) {
+    if (regex.test(url)) {
+      if (!blockedUrls.includes(url)) {
+        blockedUrls.push(url);
+        chrome.storage.sync.set({ blockedUrls });
+        chrome.runtime.sendMessage({
+          action: "updateBlockedCount",
+          count: blockedUrls.length
+        });
+      }
+
+      if (details.tabId >= 0) {
+        chrome.tabs.get(details.tabId, (tab) => {
+          if (chrome.runtime.lastError || !tab || !tab.url) return;
+
+          const currentTabUrl = tab.url;
+
+          const blockUrl = chrome.runtime.getURL('blockpage.html') +
+            `?u=${encodeURIComponent(url)}` +
+            `&r=${encodeURIComponent(pattern)}` +
+            `&origin=${encodeURIComponent(currentTabUrl)}`;
+
+          chrome.tabs.update(details.tabId, { url: blockUrl });
+        });
+      }
+
+      break;
+    }
+  }
+}, { urls: ["<all_urls>"] });
+
+/* =========================
+   CPU MONITORING SECTION
+========================= */
+let lastCpuSample = null;
+let consecutiveFlatCount = 0;
+const CPU_THRESHOLD = 15;
+const FLAT_LINE_THRESHOLD = 7;
+const CPU_CHECK_INTERVAL = 1000; // ms
+
+function calculateUsageDelta(prev, curr) {
+  return curr.map((core, i) => {
+    const prevCore = prev[i];
+    const activePrev = prevCore.usage.user + prevCore.usage.kernel;
+    const activeCurr = core.usage.user + core.usage.kernel;
+    const totalPrev = prevCore.usage.total;
+    const totalCurr = core.usage.total;
+
+    const activeDelta = activeCurr - activePrev;
+    const totalDelta = totalCurr - totalPrev;
+
+    return totalDelta === 0 ? 0 : (activeDelta / totalDelta) * 100;
   });
+}
 
-// Web Request Interceptor
-chrome.webRequest.onBeforeRequest.addListener(
-  (details) => {
-    if (!protectionEnabled) return;
+function monitorCpuUsage() {
+  chrome.system.cpu.getInfo(current => {
+    if (lastCpuSample) {
+      const usagePercents = calculateUsageDelta(lastCpuSample.processors, current.processors);
+      const avgUsage = usagePercents.reduce((a, b) => a + b, 0) / usagePercents.length;
+      console.log(`[CPU] Usage: ${avgUsage.toFixed(2)}%`);
 
-    // Immediately block all requests if cryptojacking detected
-    if (cryptojackingDetected) {
-      return { cancel: true };
-    }
+      if (avgUsage > CPU_THRESHOLD) {
+        const lastAvg = lastCpuSample._avg || 0;
+        const isFlat = Math.abs(avgUsage - lastAvg) < 3.5;
 
-    const url = details.url;
-    let origin;
+        if (isFlat) {
+          consecutiveFlatCount++;
+        } else {
+          consecutiveFlatCount = 0;
+        }
 
-    try {
-      const docUrl = details.documentUrl || details.initiator;
-      origin = docUrl ? new URL(docUrl).origin : new URL(url).origin;
-    } catch (e) {
-      origin = new URL(url).origin;
-    }
+        if (consecutiveFlatCount >= FLAT_LINE_THRESHOLD) {
+          console.warn("[ALERT] Potential cryptojacking detected — sustained high CPU usage!");
+          consecutiveFlatCount = 0;
 
-    // Check whitelist
-    if (whitelist[origin] && whitelist[origin].includes(url)) {
-      return;
-    }
-
-    // Check against blacklist patterns
-    for (let { regex, pattern } of regexPatterns) {
-      if (regex.test(url)) {
-        // Add to blocked URLs list
-        if (!blockedUrls.includes(url)) {
-          blockedUrls.push(url);
-          chrome.storage.sync.set({ blockedUrls: blockedUrls });
-          chrome.runtime.sendMessage({
-            action: "updateBlockedCount",
-            count: blockedUrls.length
+          chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+            if (tabs.length > 0) {
+              const currentTab = tabs[0];
+              const currentUrl = currentTab.url; // 👈 This gets the current tab's URL
+              const blockUrl = chrome.runtime.getURL('blockpage.html') +
+                `?u=${encodeURIComponent("Resource Usage")}` +
+                `&r=${encodeURIComponent('Potential cryptojacking detected')}` +
+                `&origin=${encodeURIComponent(currentUrl)}`
+              chrome.tabs.update(currentTab.id, { url: blockUrl });
+            }
           });
         }
 
-        const pageUrl = chrome.runtime.getURL('blockpage.html') +
-          `?u=${encodeURIComponent(url)}&r=${encodeURIComponent(pattern)}&origin=${encodeURIComponent(origin)}`;
-
-        if (details.tabId !== -1) {
-          chrome.tabs.update(details.tabId, { url: pageUrl });
-        }
-
-        return { redirectUrl: pageUrl };
+        current._avg = avgUsage;
+      } else {
+        consecutiveFlatCount = 0;
       }
     }
-  },
-  { urls: ["<all_urls>"] },
-  ["blocking"]
-);
 
-// WebSocket Connection for CPU Monitoring
-
-let socket = null;
-let latestNumber = "Waiting for data...";
-let popupPort = null;
-
-function connectWebSocket() {
-  socket = new WebSocket("ws://localhost:8765");
-
-  socket.onopen = function(e) {
-    console.log("[background.js] WebSocket connection established");
-  };
-
-  socket.onmessage = async function(event) {
-    try {
-      const data = event.data;
-      latestNumber = event.data;
-      console.log(`[background.js] Received number:`, latestNumber);
-
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const tab = tabs[0];
-        console.log(tab);
-        if (tab && tab.url && tab.url.startsWith("http")) {
-          const redirectUrl = chrome.runtime.getURL('blockpage.html') +
-            `?u=${encodeURIComponent(data.alert)}&r=${encodeURIComponent(tab.url)}&origin=${encodeURIComponent(tab.url)}`;  //encodeURIComponent('Resource Based Detection')
-          chrome.tabs.update(tab.id, { url: redirectUrl });
-          console.log(redirectUrl);
-        }
-      });
-      console.log("THIS WORKS");
-    } catch (err) {
-      console.error("[background.js] Failed to process message:", err);
-    }
-  };
-
-  socket.onclose = function(event) {
-    console.log("[background.js] WebSocket connection closed, reconnecting...");
-    setTimeout(connectWebSocket, 1000);
-  };
-
-  socket.onerror = function(error) {
-    console.error("[background.js] WebSocket error:", error?.message || error);
-    socket.close(); // Triggers onclose and reconnect
-  };
+    lastCpuSample = current;
+  });
 }
 
-connectWebSocket();
+setInterval(monitorCpuUsage, CPU_CHECK_INTERVAL);
