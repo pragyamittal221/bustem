@@ -10,12 +10,10 @@ function wildcardToRegex(wildcard) {
 }
 
 (async () => {
-  // Initialize with current protection state and blocked URLs
   const data = await chrome.storage.sync.get(['protectionActive', 'blockedUrls']);
-  protectionEnabled = data.protectionActive !== false; // This ensures protection is only disabled when explicitly set to false.
+  protectionEnabled = data.protectionActive !== false;
   blockedUrls = data.blockedUrls || [];
 
-  // Load and parse the blacklist
   const blacklistText = await fetch(chrome.runtime.getURL('blacklist.txt')).then(r => r.text());
   regexPatterns = blacklistText.split('\n')
     .filter(line => line.trim() && !line.startsWith('#'))
@@ -25,7 +23,6 @@ function wildcardToRegex(wildcard) {
     }));
 })();
 
-// Listen for changes to protection state in chrome.storage
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "sync" && changes.protectionActive) {
     protectionEnabled = changes.protectionActive.newValue !== false;
@@ -33,7 +30,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 chrome.webRequest.onCompleted.addListener(async (details) => {
-  if (!protectionEnabled) return; // Skip if protection is disabled.
+  if (!protectionEnabled) return;
 
   const url = details.url;
 
@@ -99,13 +96,11 @@ function monitorCpuUsage() {
       const avgUsage = usagePercents.reduce((a, b) => a + b, 0) / usagePercents.length;
       current._avg = avgUsage;
 
-      // 🔄 Send live sample to popup
       chrome.runtime.sendMessage({
         action: 'cpuSample',
         avgUsage: avgUsage
       });
 
-      // Your detection logic continues below...
       if (avgUsage > CPU_THRESHOLD) {
         const lastAvg = lastCpuSample._avg || 0;
         const isFlat = Math.abs(avgUsage - lastAvg) < 3.5;
