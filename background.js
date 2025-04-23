@@ -97,8 +97,15 @@ function monitorCpuUsage() {
     if (lastCpuSample) {
       const usagePercents = calculateUsageDelta(lastCpuSample.processors, current.processors);
       const avgUsage = usagePercents.reduce((a, b) => a + b, 0) / usagePercents.length;
-      console.log(`[CPU] Usage: ${avgUsage.toFixed(2)}%`);
+      current._avg = avgUsage;
 
+      // 🔄 Send live sample to popup
+      chrome.runtime.sendMessage({
+        action: 'cpuSample',
+        avgUsage: avgUsage
+      });
+
+      // Your detection logic continues below...
       if (avgUsage > CPU_THRESHOLD) {
         const lastAvg = lastCpuSample._avg || 0;
         const isFlat = Math.abs(avgUsage - lastAvg) < 3.5;
@@ -117,17 +124,16 @@ function monitorCpuUsage() {
             chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
               if (tabs.length > 0) {
                 const currentTab = tabs[0];
-                const currentUrl = currentTab.url; // 👈 This gets the current tab's URL
+                const currentUrl = currentTab.url;
                 const blockUrl = chrome.runtime.getURL('blockpage.html') +
                   `?u=${encodeURIComponent("Resource Usage")}` +
                   `&r=${encodeURIComponent('Potential cryptojacking detected')}` +
-                  `&origin=${encodeURIComponent(currentUrl)}`
+                  `&origin=${encodeURIComponent(currentUrl)}`;
                 chrome.tabs.update(currentTab.id, { url: blockUrl });
               }
             });
           }
         }
-        current._avg = avgUsage;
       } else {
         consecutiveFlatCount = 0;
       }
@@ -138,3 +144,4 @@ function monitorCpuUsage() {
 }
 
 setInterval(monitorCpuUsage, CPU_CHECK_INTERVAL);
+
