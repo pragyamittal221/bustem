@@ -1,43 +1,95 @@
+import asyncio
+import websockets
 import psutil
 import time
+import json
 
-# Define thresholds for cryptojacking detection
-CPU_THRESHOLD = 15  # Trigger cryptojacking detection if CPU usage exceeds this threshold
-CHECK_INTERVAL = 1  # Check system resources every second
-FLAT_LINE_THRESHOLD = 5  # Number of consecutive seconds to consider a flat line
 
-# Store previous CPU usage and track sustained usage
+CPU_THRESHOLD = 0
+CHECK_INTERVAL = 1
+FLAT_LINE_THRESHOLD = 5
+FLUCTUATION_THRESHOLD = 16.5
+
+
 previous_cpu_usage = 0
 consecutive_high_usage_count = 0
+last_alert_time = 0
+ALERT_COOLDOWN = 30
 
-def monitor_system_resources():
-    global previous_cpu_usage, consecutive_high_usage_count
+
+async def send_alert(websocket, message, cpu_usage):
+    """Send an alert message through WebSocket"""
+    data = {
+        "alert": message,
+        "cpu_usage": cpu_usage,
+        "timestamp": time.time(),
+        "status": "alert"
+    }
+    try:
+        await websocket.send(json.dumps(data))
+        print(f"Sent alert: {message}")
+    except Exception as e:
+        print(f"Error sending alert: {e}")
+
+
+async def send_status_update(websocket, cpu_usage):
+    """Send periodic status updates (only when above threshold)"""
+    data = {
+        "cpu_usage": cpu_usage,
+        "timestamp": time.time(),
+        "status": "update"
+    }
+    try:
+        await websocket.send(json.dumps(data))
+    except Exception as e:
+        print(f"Error sending status update: {e}")
+
+
+async def monitor_system_resources(websocket):
+    global previous_cpu_usage, consecutive_high_usage_count, last_alert_time
 
     while True:
-        # Get the current CPU usage (percentage) every second
         current_cpu_usage = psutil.cpu_percent(interval=CHECK_INTERVAL)
+        current_time = time.time()
 
-        # Print the current CPU usage
         print(f"Current CPU Usage: {current_cpu_usage}%")
 
-        # Check if the CPU usage exceeds the threshold
         if current_cpu_usage > CPU_THRESHOLD:
-            # Check if the CPU usage is consistent (flat line behavior)
-            if abs(current_cpu_usage - previous_cpu_usage) < 3.5:
+            if abs(current_cpu_usage - previous_cpu_usage) < FLUCTUATION_THRESHOLD:
                 consecutive_high_usage_count += 1
+
+                # await send_status_update(websocket, current_cpu_usage)
+
+                if consecutive_high_usage_count >= FLAT_LINE_THRESHOLD:
+                    if current_time - last_alert_time > ALERT_COOLDOWN:
+                        alert_msg = (
+                            f"Cryptojacking detected! "
+                            f"Sustained CPU usage: {current_cpu_usage}% "
+                            f"for {consecutive_high_usage_count} seconds"
+                        )
+                        print(alert_msg)
+                        await send_alert(websocket, alert_msg, current_cpu_usage)
+                        last_alert_time = current_time
+                        consecutive_high_usage_count = 0
             else:
-                consecutive_high_usage_count = 0  # Reset if the CPU usage fluctuates
-
-            # If the usage stays high for a certain number of consecutive checks, flag it
-            if consecutive_high_usage_count >= FLAT_LINE_THRESHOLD:
-                print("Potential cryptojacking detected! Sustained high CPU usage detected.")
-                consecutive_high_usage_count = 0  # Reset after detection
-
+                consecutive_high_usage_count = 0
         else:
-            consecutive_high_usage_count = 0  # Reset if the CPU usage falls below the threshold
+            consecutive_high_usage_count = 0
 
-        # Update the previous CPU usage for the next check
         previous_cpu_usage = current_cpu_usage
 
+
+async def main():
+    async with websockets.serve(monitor_system_resources, "localhost", 8765):
+        print("Cryptojacking detector running on ws://localhost:8765")
+        print(f"Alert threshold: {CPU_THRESHOLD}% CPU for {FLAT_LINE_THRESHOLD} seconds")
+        await asyncio.Future()
+
+
 if __name__ == "__main__":
-    monitor_system_resources()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nServer stopped by user")
+    except Exception as e:
+        print(f"Fatal error: {e}")
