@@ -1,85 +1,96 @@
-// Updated list of crypto-mining script patterns (2024)
-const MINING_SCRIPTS = [
-  // Common mining scripts
-  /coin[-_]?hive\./i,
-  /cryptoloot\./i,
-  /jse?coin\./i,
-  /miner?\.pr0gramm\./i,
-  /minemytraffic\./i,
-  /ppoi\.org/i,
-  /projectpoi\./i,
-  /authedmine\./i,
-  /crypto[-_]?loot\./i,
-  /minero\./i,
-  /webassembly\.stream/i,
-  /wasm\.stream/i,
-  /\/lib\/cryptonight\.wasm/i,
-  /\/miner\.js/i,
-  /\/worker\.js/i,
-  /\/cn\.js/i, // Cryptonight
-  /\/xmr\.min\.js/i, // Monero miners
+let regexPatterns = [];
+let whitelist = {};
+let protectionEnabled = true;
+let cryptojackingDetected = false;  // Flag to track cryptojacking alert
 
-  // Mining pools
-  /minexmr\./i,
-  /xmrpool\./i,
-  /supportxmr\./i,
-  /moneroocean\./i,
-  /nanopool\./i,
-  /nicehash\./i
-];
+chrome.storage.sync.get(['protectionActive'], function (data) {
+  protectionEnabled = data.protectionActive !== false;
+});
 
-// Logs the URL and type of mining activity detected to local storage
-async function logDetection(url, type) {
-  const { detections = [] } = await chrome.storage.local.get('detections');
-  detections.push({
-    url,
-    type,
-    timestamp: new Date().toISOString()
-  });
-  await chrome.storage.local.set({ detections });
+function wildcardToRegExp(wildcard) {
+  return new RegExp("^" + wildcard
+    .replace(/\./g, '\\.')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.') + "$");
 }
 
-// Checks every network request against known miner URLs
-chrome.webRequest.onBeforeRequest.addListener(
-  async (details) => {
-    const url = details.url.toLowerCase();
-    const isMiner = MINING_SCRIPTS.some(regex => regex.test(url));
+fetch(chrome.runtime.getURL('blacklist.txt'))
+  .then(r => r.text())
+  .then(text => {
+    const lines = text.split('\n').filter(l =>
+      l.trim() && !l.startsWith('#')
+    );
+    regexPatterns = lines.map(entry => ({
+      pattern: entry,
+      regex: wildcardToRegExp(entry)
+    }));
+  });
 
-    if (isMiner) {
-      await logDetection(url, 'network_request');
-      chrome.action.setBadgeText({ text: '!' });
-      chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+chrome.webRequest.onBeforeRequest.addListener(
+  (details) => {
+    if (!protectionEnabled || cryptojackingDetected) return;
+
+    const url = details.url;
+    let origin;
+
+    try {
+      const docUrl = details.documentUrl || details.initiator;
+      origin = docUrl ? new URL(docUrl).origin : new URL(url).origin;
+    } catch (e) {
+      origin = new URL(url).origin;
+    }
+
+    if (whitelist[origin] && whitelist[origin].includes(url)) {
+      return;
+    }
+
+    for (let { regex, pattern } of regexPatterns) {
+      if (regex.test(url)) {
+        const pageUrl = chrome.runtime.getURL('blockpage.html') +
+          `?u=${encodeURIComponent(url)}&r=${encodeURIComponent(pattern)}&origin=${encodeURIComponent(origin)}`;
+
+        if (details.tabId !== -1) {
+          chrome.tabs.update(details.tabId, { url: pageUrl });
+        }
+
+        return { redirectUrl: pageUrl };
+      }
     }
   },
-  { urls: ["<all_urls>"] }
+  { urls: ["<all_urls>"] },
+  ["blocking"]
 );
 
-// Listens for messages from content.js and logs wasm inline and iframe miners
-chrome.runtime.onMessage.addListener(
-  async (message) => {
-
-  if (message.type === 'wasm_usage') {
-    await logDetection(message.url, 'wasm_usage');
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "whitelist") {
+    const { origin, url } = message;
+    if (!whitelist[origin]) whitelist[origin] = [];
+    if (!whitelist[origin].includes(url)) {
+      whitelist[origin].push(url);
+    }
+    sendResponse({ status: "ok" });
   }
 
-  if (message.type === 'inline_miner') {
-    await logDetection(message.url, 'inline_miner');
+  else if (message.action === "toggleProtection") {
+    protectionEnabled = message.isActive;
+    chrome.storage.sync.set({ protectionActive: protectionEnabled });
+
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach(tab => {
+        chrome.tabs.sendMessage(tab.id, {
+          action: "protectionStateChanged",
+          isActive: protectionEnabled
+        }).catch(() => { });
+      });
+    });
+
+    sendResponse({ status: "success" });
   }
 
-  if (message.type === 'miner_iframe') {
-    await logDetection(message.url, 'miner_iframe');
+  else if (message.action === "getProtectionState") {
+    sendResponse({ isActive: protectionEnabled });
   }
-
-  chrome.action.setBadgeText({ text: '!' });
-  chrome.action.setBadgeBackgroundColor({ color: '#FF0000' }); 
 });
 
-// Cleanup old entries every hour
-chrome.alarms.create('cleanup', { periodInMinutes: 60 });
-chrome.alarms.onAlarm.addListener(async () => {
-  const { detections = [] } = await chrome.storage.local.get('detections');
-  const freshDetections = detections.filter(
-    d => new Date() - new Date(d.timestamp) < 86400000 // 24h
-  );
-  await chrome.storage.local.set({ detections: freshDetections });
-});
+/// RESOURCES
+
